@@ -1,57 +1,33 @@
 const mongo = require("mongoose");
-
-const userSchema = new mongo.Schema({
-  name: {
-    type: String,
-    required: true,
-  },
-
-  email: {
-    type: String,
-    required: true,
-  },
-
-  password: {
-    type: String,
-    required: true,
-  },
-
-  accountdetails: {
-    accountnumber: {
-      type: Number,
-      required: true,
-      unique: true,
-    },
-    accountpin: {
-      type: Number,
-      required: true,
-    },
-    accounttype: {
+// schema for user details
+const userSchema = new mongo.Schema(
+  // document for user details
+  {
+    name: {
       type: String,
       required: true,
     },
 
-    accountbalance: {
-      type: Number,
-    },
-    accountholdername: {
+    email: {
       type: String,
       required: true,
     },
-  },
-  benificiary: [
-    {
-      benificiaryname: { type: String },
-      benificiaryaccountnumber: { type: Number },
-    },
-  ],
 
-  transationhistory: [
-    {
-      transactionnumber: { type: Number },
-      transactionamount: { type: Number },
+    password: {
+      type: String,
+      required: true,
     },
-  ],
-});
+
+    otp: {
+      type: Number,
+      default: 0,
+    },
+
+    accountdetails: {
+      type: mongo.Schema.Types.ObjectId,
+      ref: "accountinfo",
+    },
+  }
+);
 
 module.exports = mongo.model("users", userSchema);
