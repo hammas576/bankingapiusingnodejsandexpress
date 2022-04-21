@@ -9,6 +9,8 @@ var cookieParser = require("cookie-parser");
 app.use(cookieParser());
 const auth = require("./middlewares/auth");
 const nodemailer = require("nodemailer");
+const ObjectsToCsv = require("objects-to-csv");
+var generateDownloadLink = require("generate-download-link");
 
 // importing database schemas
 const user = require("./models/user");
@@ -124,6 +126,7 @@ app.get("/displayuser", auth, async (req, res) => {
 //--------------------------------- path for benificiary info
 
 const benificiaryrouter = require("./routes/benificiaryroutes");
+const res = require("express/lib/response");
 //const { response } = require("express");
 app.use("/benificiaryroutes", benificiaryrouter);
 
@@ -361,6 +364,8 @@ app.post("/verifyotp", auth, async (req, res) => {
   }
 });
 
+//----------------------------------------route for generating
+
 app.get("/generatestatement", auth, async (req, res) => {
   const ouruser = await user.findOne(res.authuser).lean().populate({
     path: "accountdetails",
@@ -387,12 +392,43 @@ app.get("/generatestatement", auth, async (req, res) => {
   var dateTime = date + " " + time;
   //------------------------------------------------
 
-  res.json({
-    Accountbalance: currentuser.accountbalance,
-    Date: dateTime,
-    Financialstatement: currentuser.transactionhistory,
-  });
+  // res.json({
+  //   Accountbalance: currentuser.accountbalance,
+  //   Date: dateTime,
+  //   Financialstatement: currentuser.transactionhistory,
+  // });
+
+  const data = [
+    {
+      Accountbalance: currentuser.accountbalance,
+      Date: dateTime,
+      Financialstatement: currentuser.transactionhistory,
+    },
+  ];
+  csvgenerator(data);
+
+  let filePath = `${__dirname}/test.csv`;
+  res.download(filePath);
 });
+
+//-----------------------------for testing purpose to download csv
+app.get("/downloadcsv", (req, res) => {
+  let filePath = `${__dirname}/test.csv`;
+
+  res.download(filePath);
+});
+
+//------------------------------------functions to download statement in csv
+
+async function csvgenerator(data) {
+  const csv = new ObjectsToCsv(data);
+
+  // Save to file:
+  await csv.toDisk("./test.csv");
+
+  // Return the CSV file as string:
+  //console.log(await csv.toString());
+}
 
 // running our server at the following port
 app.listen(4000, () => {

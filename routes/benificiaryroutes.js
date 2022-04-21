@@ -76,26 +76,84 @@ router.post("/", auth, async (req, res) => {
   }
 });
 
-// ---------------------------------------------delete a benificiary
+//------------------------------------ update a benificiary
 
-router.delete("/", auth, async (req, res) => {
+router.put("/", auth, async (req, res) => {
+  const searchaccountnumber = req.body.searchaccountnumber;
+  const newaccountnumber = req.body.newaccountnumber;
+  let newbenif;
   try {
-    userid = res.authuser._id;
+    const ouruser = await user.findOne(res.authuser).lean().populate({
+      path: "accountdetails",
+    });
 
-    ouruser = await user.findOne({ userid });
-
-    const acct = await accounts.findOneAndUpdate(
-      { _id: ouruser.accountdetails },
-      { $remove: { benificiarydetails: beni._id } }
-    );
+    const currentuser = await accounts
+      .findOne(ouruser.accountdetails)
+      .lean()
+      .populate({
+        path: "benificiarydetails",
+      })
+      .populate({ path: "transactionhistory" });
 
     if (!ouruser) {
       res.json({ message: "user doesnt exist" });
     }
 
-    res.json({ add: "added" });
+    const benifi = currentuser.benificiarydetails;
+    for (var i = 0; i < benifi.length; i++) {
+      if (benifi[i].benificiaryaccountnumber == searchaccountnumber) {
+        {
+          benifi[i].benificiaryaccountnumber = newaccountnumber;
+          newbenif = benifi[i];
+        }
+      }
+    }
+    await benificiary.findOneAndUpdate(
+      { _id: newbenif },
+      { benificiaryaccountnumber: newbenif.benificiaryaccountnumber }
+    );
+
+    res.json({ message: "succesfully updated benificiary" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.json({ message: error.message });
+  }
+});
+
+// ---------------------------------------------delete a benificiary
+
+router.delete("/", auth, async (req, res) => {
+  const searchaccountnumber = req.body.searchaccountnumber;
+  let newbenif;
+  try {
+    const ouruser = await user.findOne(res.authuser).lean().populate({
+      path: "accountdetails",
+    });
+
+    const currentuser = await accounts
+      .findOne(ouruser.accountdetails)
+      .lean()
+      .populate({
+        path: "benificiarydetails",
+      })
+      .populate({ path: "transactionhistory" });
+
+    if (!ouruser) {
+      res.json({ message: "user doesnt exist" });
+    }
+
+    const benifi = currentuser.benificiarydetails;
+    for (var i = 0; i < benifi.length; i++) {
+      if (benifi[i].benificiaryaccountnumber == searchaccountnumber) {
+        {
+          newbenif = benifi[i];
+        }
+      }
+    }
+    await benificiary.findOneAndDelete({ _id: newbenif });
+
+    res.json({ message: "succesfully deleted benificiary" });
+  } catch (error) {
+    res.json({ message: error.message });
   }
 });
 
