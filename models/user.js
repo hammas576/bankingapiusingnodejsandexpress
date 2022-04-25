@@ -22,7 +22,10 @@ const userSchema = new mongo.Schema(
       type: Number,
       default: 0,
     },
-
+    securityquestion: {
+      type: String,
+      default: 0,
+    },
     accountdetails: {
       type: mongo.Schema.Types.ObjectId,
       ref: "accountinfo",

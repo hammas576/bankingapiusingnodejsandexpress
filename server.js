@@ -1,4 +1,4 @@
-// requirements and initialization
+// ------------------------------------requirements and initialization
 require("dotenv").config();
 const expresss = require("express");
 const app = expresss();
@@ -11,31 +11,36 @@ const auth = require("./middlewares/auth");
 const nodemailer = require("nodemailer");
 const ObjectsToCsv = require("objects-to-csv");
 var generateDownloadLink = require("generate-download-link");
+var PDFDocument = require("pdfkit");
+const fs = require("fs");
 
-// importing database schemas
+//-------------------------------------------------------------------------
+
+// -------------------------------------------------importing database schemas
 const user = require("./models/user");
 const accounts = require("./models/accountdetails");
 const transactions = require("./models/transactions");
 const benificiary = require("./models/benificiary");
 const { findOne } = require("./models/user");
+//----------------------------------------------------------------------------
 
-// database connections
+// --------------------------------------------database connections
 mongo.connect(process.env.DATABASE_URL);
 const db = mongo.connection;
 
-// if db is gives error
+// ---------------------------------------------if db is gives error
 db.on("error", (error) => {
   console.error(error);
 });
 
-//only called once db is connected
+//----------------------------------------only called once db is connected
 db.once("open", () => {
   console.log("connected to database ");
 });
 
 app.use(expresss.json());
 
-// ------------------------------------route for login
+// ----------------------------------------------------route for login
 app.post("/login", async (req, res) => {
   console.log("user is at our login route");
   var cookie = req.cookies.jwtToken;
@@ -47,7 +52,7 @@ app.post("/login", async (req, res) => {
     return res.json({ status: "error", error: "invalid username or password" });
   }
 
-  // comparing password
+  // ----------------------------------------------------comparing password
   if (await bcrypt.compare(password, currentuser.password)) {
     const key = process.env.SECRET_TOKEN;
     const token = jwt.sign(
@@ -61,7 +66,38 @@ app.post("/login", async (req, res) => {
   }
 });
 
-//-------------------------------route to change our password
+//--------------------------------------------------route for forgot password
+
+app.post("/forgotpassword", async (req, res) => {
+  const securityquestion = req.body.securityquestion;
+  const name = req.body.name;
+  const hashedpassword = await bcrypt.hash(req.body.newpassword, 10);
+  const currentuser = await user.findOne({ name }).lean();
+
+  if (!currentuser) {
+    return res.json({ status: "error", error: "invalid username or password" });
+  }
+
+  if (currentuser.securityquestion == securityquestion) {
+    try {
+      await user.findOneAndUpdate(
+        { _id: currentuser._id },
+        { password: hashedpassword }
+      );
+
+      res.json({
+        message:
+          "successfully updated password please login again with new password",
+      });
+    } catch (error) {
+      res.json({ message: error.message });
+    }
+  } else {
+    res.json({ message: "Wrong security question" });
+  }
+});
+
+//----------------------------------------------------------------route to change our password
 
 app.post("/changepassword", auth, async (req, res) => {
   const name = res.authuser.name;
@@ -74,7 +110,7 @@ app.post("/changepassword", auth, async (req, res) => {
     return res.json({ status: "error", error: "invalid password" });
   }
 
-  // comparing password
+  // ------------------------------------------------------------comparing password
   if (await bcrypt.compare(oldpassword, currentuser.password)) {
     try {
       await user.findOneAndUpdate(
@@ -92,7 +128,7 @@ app.post("/changepassword", auth, async (req, res) => {
   }
 });
 
-// -------------------------------------display current user information
+// -------------------------------------------------------------display current user information
 app.get("/displayuser", auth, async (req, res) => {
   try {
     userid = res.authuser._id;
@@ -123,14 +159,14 @@ app.get("/displayuser", auth, async (req, res) => {
   }
 });
 
-//--------------------------------- path for benificiary info
+//--------------------------------------------------------------- route for benificiary info
 
 const benificiaryrouter = require("./routes/benificiaryroutes");
 const res = require("express/lib/response");
 //const { response } = require("express");
 app.use("/benificiaryroutes", benificiaryrouter);
 
-// -----------------------------------------path for registeration
+// ----------------------------------------------------------------path for registeration
 
 app.post("/register", async (req, res) => {
   // creating new object for user
@@ -141,6 +177,7 @@ app.post("/register", async (req, res) => {
     name: req.body.name,
     email: req.body.email,
     password: hashedpassword,
+    securityquestion: req.body.securityquestion,
   });
 
   // creating a new object for user account details
@@ -185,9 +222,9 @@ app.post("/register", async (req, res) => {
   }
 });
 
-//---------------------------------------------send money route
+//---------------------------------------------------------------------send money route
 app.post("/sendmoney", auth, async (req, res) => {
-  const senderaccountnumber = req.body.senderaccountnumber;
+  // const senderaccountnumber = req.body.senderaccountnumber;
   const recieveraccountnumber = req.body.recieveraccountnumber;
   const amount = req.body.amount;
 
@@ -244,7 +281,7 @@ app.post("/sendmoney", auth, async (req, res) => {
   }
 });
 
-//------------------------------------------verifying otp and sending money
+//---------------------------------------------------------verifying otp and sending money
 app.post("/verifyotp", auth, async (req, res) => {
   const recieveraccountnumber = req.body.recieveraccountnumber;
   let amount = req.body.amount;
@@ -283,7 +320,7 @@ app.post("/verifyotp", auth, async (req, res) => {
         res.json({ message: "error the reciever account does not exist" });
       }
 
-      //-------------------------------updating reciever balance
+      //------------------------------------------------------updating reciever balance
       let recieverbalance =
         parseInt(reciever.accountbalance) + parseInt(amount);
 
@@ -328,8 +365,6 @@ app.post("/verifyotp", auth, async (req, res) => {
       // send mail with defined transport object
       const info = await transporter.sendMail(msg);
 
-      //      res.json({ message: "successfully sent " });
-
       // ----------------------updating the transaction history of current user
       const currentusertransaction = await new transactions({
         transactionid: 123,
@@ -364,9 +399,10 @@ app.post("/verifyotp", auth, async (req, res) => {
   }
 });
 
-//----------------------------------------route for generating
+//---------------------------------------------------------route for generating
 
-app.get("/generatestatement", auth, async (req, res) => {
+app.post("/generatestatement", auth, async (req, res) => {
+  const filetype = req.body.filetype;
   const ouruser = await user.findOne(res.authuser).lean().populate({
     path: "accountdetails",
   });
@@ -405,10 +441,31 @@ app.get("/generatestatement", auth, async (req, res) => {
       Financialstatement: currentuser.transactionhistory,
     },
   ];
-  csvgenerator(data);
 
-  let filePath = `${__dirname}/test.csv`;
-  res.download(filePath);
+  if (filetype == "csv") {
+    csvgenerator(data);
+
+    let filePath = `${__dirname}/test.csv`;
+    res.download(filePath);
+  }
+
+  if (filetype == "pdf") {
+    console.log("here");
+    const doc = new PDFDocument();
+
+    doc.pipe(fs.createWriteStream("output.pdf"));
+
+    doc
+      .fontSize(15)
+      .fillColor("blue")
+      .text(JSON.stringify(data, null, 2), 100, 100);
+    // .link(100, 100, 160, 27, link);
+
+    doc.end();
+    let filePath = `${__dirname}/output.pdf`;
+
+    res.download(filePath);
+  }
 });
 
 //-----------------------------for testing purpose to download csv
@@ -425,9 +482,6 @@ async function csvgenerator(data) {
 
   // Save to file:
   await csv.toDisk("./test.csv");
-
-  // Return the CSV file as string:
-  //console.log(await csv.toString());
 }
 
 // running our server at the following port
